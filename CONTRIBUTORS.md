@@ -1,12 +1,13 @@
 # Spotify-DL Contributors
+
 ( order is not important we are a team :) )
 
 * SwapnilSoni1999
-* pavanjadhaw 
+* pavanjadhaw
 * gringineer
-* otep 
-* nij4t 
-* josefwells 
+* otep
+* nij4t
+* josefwells
 * benthieu
 * alaendle
 * raprocks

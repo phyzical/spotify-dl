@@ -1,0 +1,20 @@
+name: 'Renovate Dependency Check'
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Renovate
+        uses: renovatebot/github-action@7d358366277001f3316d7fa54ff49a81c0158948 # v40.1.7
+        with:
+          configurationFile: .github/renovate-config.js
+          token: ${{ secrets.ALL_REPO_SCOPED_TOKEN }}
+        env:
+          LOG_LEVEL: 'info'

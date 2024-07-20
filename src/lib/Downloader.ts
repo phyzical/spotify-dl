@@ -3,61 +3,39 @@ import ffmpeg from 'fluent-ffmpeg';
 import fs from 'fs';
 import { SponsorBlock } from 'sponsorblock-api';
 
-import Config from '../config.js';
-import { cliInputs } from './setup.js';
-import Constants from '../util/constants.js';
-import {
-  logStart,
-  updateSpinner,
-  logInfo,
-  logSuccess,
-} from '../util/log-helper.js';
+import Config from '../Config.js';
+import { cliInputs } from './Setup.js';
+import Constants from '../util/Constants.js';
+import { logStart, updateSpinner, logInfo, logSuccess } from '../util/LogHelper.js';
 
 const { youtubeDLConfig, isTTY } = Config;
-const sponsorBlock = new SponsorBlock(1234);
+const sponsorBlock = new SponsorBlock('1234');
 const {
   SPONSOR_BLOCK: {
-    CATEGORIES: {
-      SPONSOR,
-      INTRO,
-      OUTRO,
-      INTERACTION,
-      SELF_PROMO,
-      MUSIC_OFF_TOPIC,
-    },
+    CATEGORIES: { SPONSOR, INTRO, OUTRO, INTERACTION, SELF_PROMO, MUSIC_OFF_TOPIC },
   },
   FFMPEG: { ASET, TIMEOUT_MINUTES },
 } = Constants;
 
-const sponsorComplexFilter = async link => {
+const sponsorComplexFilter = async (link: string): Promise<string> => {
   const videoID = new URLSearchParams(new URL(link).search).get('v');
   let segments = [];
   let complexFilter = null;
   try {
     segments = (
-      await sponsorBlock.getSegments(
-        videoID,
-        SPONSOR,
-        INTRO,
-        OUTRO,
-        INTERACTION,
-        SELF_PROMO,
-        MUSIC_OFF_TOPIC,
-      )
+      await sponsorBlock.getSegments(videoID, SPONSOR, INTRO, OUTRO, INTERACTION, SELF_PROMO, MUSIC_OFF_TOPIC)
     )
       .sort((a, b) => a.startTime - b.startTime)
       .reduce((acc, { startTime, endTime }) => {
         const previousSegment = acc[acc.length - 1];
         // if segments overlap merge
-        if (previousSegment && previousSegment.endTime > startTime) {
-          acc[acc.length - 1].endTime = endTime;
-        } else {
-          acc.push({ startTime, endTime });
-        }
+        if (previousSegment && previousSegment.endTime > startTime) acc[acc.length - 1].endTime = endTime;
+        else acc.push({ startTime, endTime });
+
         return acc;
       }, []);
     // we have to catch as it throws if none found
-  } catch (_) {}
+  } catch (_) { }
   const segmentLength = segments.length;
   if (segmentLength) {
     // 0 -> start1 , end1 -> start2, end2
@@ -65,28 +43,24 @@ const sponsorComplexFilter = async link => {
     complexFilter = segments.map((segment, i) => {
       const startString = `start=${i ? segments[i - 1].endTime : 0}`;
       const endString = `:end=${segment.startTime}`;
+
       return `[0:a]atrim=${startString}${endString},${ASET}[${i}a];`;
     });
+    complexFilter.push(`[0:a]atrim=start=${segments[segmentLength - 1].endTime}` + `,${ASET}[${segmentLength}a];`);
     complexFilter.push(
-      `[0:a]atrim=start=${segments[segmentLength - 1].endTime}` +
-        `,${ASET}[${segmentLength}a];`,
-    );
-    complexFilter.push(
-      `${complexFilter.map((_, i) => `[${i}a]`).join('')}` +
-        `concat=n=${segmentLength + 1}:v=0:a=1[outa]`,
+      `${complexFilter.map((_, i) => `[${i}a]`).join('')}` + `concat=n=${segmentLength + 1}:v=0:a=1[outa]`
     );
     complexFilter = complexFilter.join('\n');
   }
+
   return complexFilter;
 };
 
-const progressFunction = (_, downloaded, total) => {
+const progressFunction = (_, downloaded: number, total: number): void => {
   const downloadedMb = (downloaded / 1024 / 1024).toFixed(2);
   const toBeDownloadedMb = (total / 1024 / 1024).toFixed(2);
   const downloadText = `Downloaded ${downloadedMb}/${toBeDownloadedMb} MB`;
-  if (isTTY || downloadedMb % 1 == 0 || toBeDownloadedMb == downloadedMb) {
-    updateSpinner(downloadText);
-  }
+  if (isTTY || downloadedMb % 1 == 0 || toBeDownloadedMb == downloadedMb) updateSpinner(downloadText);
 };
 
 const getYoutubeDLConfig = () => {
@@ -97,9 +71,8 @@ const getYoutubeDLConfig = () => {
       .split('\n')
       .reduce((cookie, line) => {
         const segments = line.split(/[\t]+|[ ]+/);
-        if (segments.length == 7) {
-          cookie += `${segments[5]}=${segments[6]}; `;
-        }
+        if (segments.length == 7) cookie += `${segments[5]}=${segments[6]}; `;
+
         return cookie;
       }, '')
       .trim();
@@ -109,6 +82,7 @@ const getYoutubeDLConfig = () => {
       },
     };
   }
+
   return youtubeDLConfig;
 };
 
@@ -132,11 +106,10 @@ const downloader = async (youtubeLinks, output) => {
       const download = ytdl(link, getYoutubeDLConfig());
       download.on('progress', progressFunction);
       const ffmpegCommand = ffmpeg({ timeout: TIMEOUT_MINUTES * 60 });
-      if (complexFilter) {
-        ffmpegCommand.complexFilter(complexFilter).map('[outa]');
-      }
+      if (complexFilter) ffmpegCommand.complexFilter(complexFilter).map('[outa]');
+
       ffmpegCommand
-        .on('error', e => {
+        .on('error', (e) => {
           reject(e);
         })
         .on('end', () => {

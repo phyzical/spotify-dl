@@ -11,23 +11,6 @@ export default {
     // default timeout of 5 minutes when spotify api fails
     TIMEOUT_RETRY: 5 * 60,
   },
-  INPUT_TYPES: {
-    SONG: {
-      SONG: 'song',
-      PLAYLIST: 'playlist',
-      ALBUM: 'album',
-      ARTIST: 'artist',
-      SAVED_ALBUMS: 'savedAlbums',
-      SAVED_TRACKS: 'savedTracks',
-      SAVED_PLAYLISTS: 'savedPlaylists',
-    },
-    EPISODE: {
-      SHOW: 'show',
-      EPISODE: 'episode',
-      SAVED_SHOWS: 'savedShows',
-    },
-    YOUTUBE: 'youtube',
-  },
   FFMPEG: {
     ASET: 'asetpts=PTS-STARTPTS',
     TIMEOUT_MINUTES: 30,

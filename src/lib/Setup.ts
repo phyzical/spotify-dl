@@ -1,69 +1,61 @@
 import { execSync } from 'child_process';
 import path from 'path';
 import meow from 'meow';
-import urlParser from '../util/url-parser.js';
-import { removeQuery } from '../util/filters.js';
-import Constants from '../util/constants.js';
-import Config from '../config.js';
-import versionChecker from '../util/version-checker.js';
-import { logFailure } from '../util/log-helper.js';
+import urlParser from '../util/UrlParser.js';
+import { removeQuery } from '../util/Filters.js';
+import Constants from '../util/Constants.js';
+import Config from '../Config.js';
+import versionChecker from '../util/VersionChecker.js';
+import { logFailure } from '../util/LogHelper.js';
+import { Platform } from '../types/Platform.js';
+import { Flag } from '../types/config/Flag.js';
+import { Input, Inputs } from '../types/config/Input.js';
 
-const ffmpegSetup = function (platform_name) {
+const ffmpegSetup = (platform_name: Platform): void => {
+  const failureMessage = "Couldn't find ffmpeg. Please install https://ffmpeg.org";
   switch (platform_name) {
-    case 'win32': {
+    case Platform.WIN32: {
       try {
         const ffmpeg_paths = execSync('where ffmpeg');
-        if (ffmpeg_paths.includes('Could not find file')) {
+        if (ffmpeg_paths.includes('Could not find file'))
           process.env.PATH = path.resolve(__dirname, 'bin;') + process.env.PATH;
-        }
+
         break;
       } catch (err) {
-        logFailure("Couldn't find ffmpeg. Please install https://ffmpeg.org");
+        logFailure(failureMessage);
       }
       break;
     }
-    case 'linux':
-    case 'android':
-    case 'darwin':
+    case Platform.LINUX:
+    case Platform.ANDROID:
+    case Platform.DARWIN:
       try {
         const ffmpeg_paths = execSync('which ffmpeg');
         if (ffmpeg_paths == null) {
-          logFailure(
-            "ERROR: Cannot find ffmpeg! Install it first, \
-           why don't you read README.md on git!"
-          );
+          logFailure("ERROR: Cannot find ffmpeg! Install it first,  why don't you read README.md on git!");
           process.exit(-1);
-        } else {
-          execSync('export FFMPEG_PATH=$(which ffmpeg)');
-        }
+        } else execSync('export FFMPEG_PATH=$(which ffmpeg)');
 
         break;
       } catch (error) {
-        logFailure("Couldn't find ffmpeg. Please install https://ffmpeg.org");
+        logFailure(failureMessage);
       }
   }
 };
 
-export function startup() {
+export const startup = (): void => {
   // setup ffmpeg
-  ffmpegSetup(process.platform);
+  ffmpegSetup(process.platform as Platform);
   process.on('SIGINT', () => {
     process.exit(1);
   });
   versionChecker();
-}
+};
 
-export function cliInputs() {
-  const loginRequired = (flags, _input) => {
-    if (
-      (flags.savedAlbums ||
-        flags.savedPlaylists ||
-        flags.savedShows ||
-        flags.savedSongs) &&
-      !Config.isTTY
-    ) {
+export const cliInputs = (): Flag => {
+  const loginRequired = (flags, _input: string): boolean => {
+    if ((flags.savedAlbums || flags.savedPlaylists || flags.savedShows || flags.savedSongs) && !Config.isTTY)
       return true;
-    }
 
     return false;
   };
@@ -78,11 +70,7 @@ export function cliInputs() {
     },
     version: {
       alias: 'v',
-      helpText: [
-        '--version or --v',
-        '* returns the current version',
-        'eg. $ spotifydl --v',
-      ],
+      helpText: ['--version or --v', '* returns the current version', 'eg. $ spotifydl --v'],
     },
     cacheFile: {
       alias: 'cf',
@@ -230,11 +218,7 @@ export function cliInputs() {
       alias: 'oo',
       default: flagsConfig.outputOnly,
       type: 'boolean',
-      helpText: [
-        '--output-only or --oo',
-        '* saves all songs directly to the output dir',
-        'eg. $ spotifydl --oo',
-      ],
+      helpText: ['--output-only or --oo', '* saves all songs directly to the output dir', 'eg. $ spotifydl --oo'],
     },
     downloadLyrics: {
       alias: 'dl',
@@ -255,7 +239,8 @@ export function cliInputs() {
         '* allows for a user provided template to be used in the search of youtube api',
         '* supports the following contexts `albumName`, `artistName`,`itemName`',
         '* note `itemName` references the search i.e track/show',
-        '* if not provided or no relevant matches are found will fallback to "{itemName} - {albumName}" then "{itemName} - {artistName}"',
+        '* if not provided or no relevant matches are found will fallback to \
+        "{itemName} - {albumName}" then "{itemName} - {artistName}"',
         'eg. $ spotifydl --sf  "something {itemName} - {albumName} anyrandomextrastring"',
       ],
     },
@@ -289,7 +274,7 @@ export function cliInputs() {
       alias: 'oft',
       default: flagsConfig.outputFileType,
       type: 'string',
-      choices: ['mp3','flac', 'wav', 'aac'],
+      choices: ['mp3', 'flac', 'wav', 'aac'],
       helpText: [
         '--output-file-type or --oft',
         '* lets you decide what type of file to output as',
@@ -299,12 +284,7 @@ export function cliInputs() {
     },
   };
 
-  const helpText =
-    '\n' +
-    Object.values(flags).reduce(
-      (acc, flag) => `${acc}${flag.helpText.join('\n  ')}\n\n`,
-      ''
-    );
+  const helpText = '\n' + Object.values(flags).reduce((acc, flag) => `${acc}${flag.helpText.join('\n  ')}\n\n`, '');
 
   const cli = meow(
     `
@@ -333,8 +313,9 @@ export function cliInputs() {
   const { flags: inputFlags } = cli;
   let { input: inputs } = cli;
 
-  inputs = inputs.map(link => {
+  inputs = inputs.map((link: string): Input => {
     const cleanedURL = removeQuery(link);
+
     return {
       type: urlParser(cleanedURL),
       // only use cleaned url for spotify to not break youtube support
@@ -342,26 +323,20 @@ export function cliInputs() {
     };
   });
 
-  if (inputFlags.savedAlbums) {
-    inputs.push({ type: Constants.INPUT_TYPES.SONG.SAVED_ALBUMS, url: null });
-  }
-  if (inputFlags.savedTracks) {
-    inputs.push({ type: Constants.INPUT_TYPES.SONG.SAVED_TRACKS, url: null });
-  }
-  if (inputFlags.savedPlaylists) {
+  if (inputFlags.savedAlbums) inputs.push({ type: Inputs.SAVED_ALBUMS, url: null });
+
+  if (inputFlags.savedTracks) inputs.push({ type: Constants.INPUT_TYPES.SONG.SAVED_TRACKS, url: null });
+
+  if (inputFlags.savedPlaylists)
     inputs.push({
       type: Constants.INPUT_TYPES.SONG.SAVED_PLAYLISTS,
       url: null,
     });
-  }
-  if (inputFlags.savedShows) {
-    inputs.push({ type: Constants.INPUT_TYPES.EPISODE.SAVED_SHOWS, url: null });
-  }
+
+  if (inputFlags.savedShows) inputs.push({ type: Constants.INPUT_TYPES.EPISODE.SAVED_SHOWS, url: null });
 
   if (!inputs.length) {
-    console.log(
-      'No spotify url provided for scaping, See spotifydl --help for instructions'
-    );
+    console.log('No spotify url provided for scaping, See spotifydl --help for instructions');
     process.exit(1);
   }
 
@@ -374,7 +349,7 @@ export function cliInputs() {
     downloadReport: inputFlags.downloadReport,
     outputOnly: inputFlags.outputOnly,
     searchFormat: inputFlags.searchFormat,
-    exclusionFilters: inputFlags.exclusionFilters.split(',').filter(x => x),
+    exclusionFilters: inputFlags.exclusionFilters.split(',').filter((x) => x),
     login: inputFlags.login,
     username: inputFlags.username,
     password: inputFlags.password,
@@ -382,4 +357,4 @@ export function cliInputs() {
     outputFormat: inputFlags.outputFormat,
     outputFileType: inputFlags.outputFileType,
   };
-}
+};

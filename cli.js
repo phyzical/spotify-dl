@@ -17,6 +17,7 @@
 import { startup } from './lib/setup.js';
 import { logFailure } from './util/log-helper.js';
 import Runner from './util/runner.js';
+import process from 'process';
 
 startup();
 try {

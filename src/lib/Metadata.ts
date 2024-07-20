@@ -2,37 +2,44 @@ import NodeID3 from 'node-id3';
 import fs from 'fs';
 import axios from 'axios';
 import ffmpeg from 'fluent-ffmpeg';
-import { logSuccess } from '../util/log-helper.js';
-import Constants from '../util/constants.js';
-import { logInfo } from '../util/log-helper.js';
-import { splitDates } from '../util/filters.js';
-const downloadAndSaveCover = function (uri, filename) {
-  return new Promise(async (resolve, reject) => {
-    const cover = await axios.default({
-      method: 'GET',
-      url: uri,
-      responseType: 'stream',
-    });
+import { logSuccess } from '../util/LogHelper.js';
+import Constants from '../util/Constants.js';
+import { logInfo } from '../util/LogHelper.js';
+import { splitDates } from '../util/Filters.js';
+import { Track } from '../types/items/Track.js';
+import path from 'path';
+
+const downloadAndSaveCover = (uri: string | null, filename: string): Promise<unknown> =>
+  // eslint-disable-next-line no-async-promise-executor, @typescript-eslint/no-explicit-any
+  new Promise(async (resolve: (_value: unknown) => void, reject: (_reason?: any) => void): Promise<void> => {
+    let cover = '';
+    if (uri)
+      cover = (
+        await axios({
+          method: 'GET',
+          url: uri,
+          responseType: 'stream',
+        })
+      ).data;
+    else cover = fs.readFileSync(path.join(__dirname, '..', '..', 'assets', 'unknown.jpg'), 'utf8');
+
     const ffmpegCommand = ffmpeg();
     ffmpegCommand
-      .on('error', e => {
+      .on('error', (e) => {
         reject(e);
       })
       .on('end', () => {
-        resolve();
+        resolve('success');
       })
-      .input(cover.data)
+      .input(cover)
       .save(`${filename}`)
       .format('jpg');
   });
-};
 
-const mergeMetadata = async (output, songData) => {
+const mergeMetadata = async (output: string, songData: Track): Promise<void> => {
   const coverFileName = output.slice(0, output.length - 3) + 'jpg';
   let coverURL = songData.cover_url;
-  if (!coverURL) {
-    coverURL = Constants.YOUTUBE_SEARCH.GENERIC_IMAGE;
-  }
+  if (!coverURL) coverURL = Constants.YOUTUBE_SEARCH.GENERIC_IMAGE;
 
   try {
     await downloadAndSaveCover(coverURL, coverFileName);
@@ -43,21 +50,14 @@ const mergeMetadata = async (output, songData) => {
       await downloadAndSaveCover(coverURL, coverFileName);
     } catch (_e2) {
       // if it fails again just fallback to generic image
-      logInfo(
-        'Album Thumbnail corrupt for second time fallback to generic image',
-      );
+      logInfo('Album Thumbnail corrupt for second time fallback to generic image');
+
+      await downloadAndSaveCover(null, coverFileName);
     }
   }
 
-  if (!fs.existsSync(coverFileName)) {
-    await downloadAndSaveCover(
-      'https://i.ibb.co/PN87XDk/unknown.jpg',
-      coverFileName,
-    );
-  }
   const dateSplits = splitDates(songData.release_date);
-  const firstArtist =
-    songData.artists && songData.artists.length > 0 ? songData.artists[0] : '';
+  const firstArtist = songData.artists && songData.artists.length > 0 ? songData.artists.first : '';
   const metadata = {
     artist: firstArtist,
     originalArtist: firstArtist,
@@ -73,9 +73,7 @@ const mergeMetadata = async (output, songData) => {
     trackNumber: `${songData.track_number}/${songData.total_tracks}`,
     popularimeter: {
       email: 'mail@example.com',
-      rating: (
-        songData.popularity * Constants.FFMPEG.RATING_CONSTANT
-      ).toString(),
+      rating: (songData.popularity * Constants.FFMPEG.RATING_CONSTANT).toString(),
       counter: 0,
     },
     APIC: coverFileName,

@@ -1,12 +1,12 @@
 import path from 'path';
 import fs from 'fs';
-import getLinks from './get-link.js';
-import { cleanOutputPath } from './filters.js';
-import Constants from './constants.js';
-import downloader from '../lib/downloader.js';
-import { writeId, findId } from '../lib/cache.js';
-import mergeMetadata from '../lib/metadata.js';
-import { cliInputs } from '../lib/setup.js';
+import getLinks from './GetLink.js';
+import { cleanOutputPath } from './Filters.js';
+import Constants from './Constants.js';
+import downloader from '../lib/Downloader.js';
+import { writeId, findId } from '../lib/Cache.js';
+import mergeMetadata from '../lib/Metadata.js';
+import { cliInputs } from '../lib/Setup.js';
 import {
   getTrack,
   getPlaylist,
@@ -18,13 +18,17 @@ import {
   getSavedPlaylists,
   getSavedTracks,
   getAlbum,
-} from './get-songdata.js';
-import { logSuccess, logInfo, logFailure } from './log-helper.js';
-import downloadSubtitles from '../lib/subtitle-downloader.js';
-import { generateTemplateString } from './format-generators.js';
+} from './GetSongdata.js';
+import { logSuccess, logInfo, logFailure } from './LogHelper.js';
+import downloadSubtitles from '../lib/SubtitleDownloader.js';
+import { generateTemplateString } from './FormatGenerators.js';
+import { initArrayPolyfills } from './polyfills/Array.js';
+import { Inputs } from '../types/config/Input.js';
+import { List } from '../types/items/List.js';
+import { Track } from '../types/items/Track.js';
+import { Playlist } from '../types/items/Playlist.js';
 
 const {
-  INPUT_TYPES,
   YOUTUBE_SEARCH: { GENERIC_IMAGE },
 } = Constants;
 const {
@@ -37,209 +41,205 @@ const {
   searchFormat,
   exclusionFilters,
   outputFormat,
-  outputFileType
+  outputFileType,
 } = cliInputs();
 
-const itemOutputPath = (itemName, albumName, artistName) => {
-  itemName = cleanOutputPath(itemName || '_');
+const itemOutputPath = (item: Track): string => {
+  const itemName = cleanOutputPath(item.name || '_');
   const generatedPathSegments = cleanOutputPath(
-    generateTemplateString(itemName, albumName, artistName, outputFormat),
+    generateTemplateString(itemName, item.album_name, item.artists.first(), outputFormat)
   ).split('___');
-  return `${path.join(
-    path.normalize(output),
-    ...(outputOnly ? [itemName] : generatedPathSegments),
-  )}.${outputFileType}`;
+
+  return `${path.join(path.normalize(output), ...(outputOnly ? [itemName] : generatedPathSegments))}.${outputFileType}`;
 };
 
-const downloadList = async list => {
+const downloadList = async (list: List): Promise<List> => {
   list.name = list.name.replace('/', '-');
   const totalItems = list.items.length;
   logInfo(`Downloading: ${list.name}`);
   logInfo(`Total Items: ${totalItems}`);
   let currentCount = 0;
-  for (const nextItem of list.items) {
+  for (const item of list.items) {
     currentCount++;
-    const itemId = nextItem.id;
-    const itemName = nextItem.name;
-    const albumName = nextItem.album_name;
-    const artistName = nextItem.artists[0];
-    const fullItemPath = itemOutputPath(itemName, albumName, artistName);
+    const fullItemPath = itemOutputPath(item);
     const itemDir = fullItemPath.substr(0, fullItemPath.lastIndexOf(path.sep));
-    const cached = findId(nextItem.id, itemDir);
+    const cached = findId(item.id, itemDir);
 
     if (!cached) {
       logInfo(
         [
           `${currentCount}/${totalItems}`,
-          `Artist: ${artistName}`,
-          `Album: ${albumName}`,
-          `Item: ${itemName}`,
-        ].join('\n'),
+          `Artist: ${item.artists.first}`,
+          `Album: ${item.album_name}`,
+          `Item: ${item.name}`,
+        ].join('\n')
       );
       //create the dir if it doesn't exist
       fs.mkdirSync(itemDir, { recursive: true });
 
-      if (downloadLyrics) {
-        nextItem.lyrics = await downloadSubtitles(itemName, artistName);
-      }
+      if (downloadLyrics) item.lyrics = await downloadSubtitles(item);
 
-      const ytLinks = nextItem.URL
-        ? [nextItem.URL]
+      const ytLinks = item.URL
+        ? [item.URL]
         : await getLinks({
-            itemName,
-            albumName,
-            artistName,
-            extraSearch,
-            searchFormat,
-            type: list.type,
-            exclusionFilters,
-          });
+          itemName,
+          albumName,
+          artistName,
+          extraSearch,
+          searchFormat,
+          type: list.type,
+          exclusionFilters,
+        });
 
       const outputFilePath = path.resolve(fullItemPath);
 
       const downloadSuccessful = await downloader(ytLinks, outputFilePath);
 
       if (downloadSuccessful) {
-        await mergeMetadata(outputFilePath, nextItem);
-        writeId(itemDir, itemId);
+        await mergeMetadata(outputFilePath, item);
+        writeId(itemDir, item.id);
       }
-      nextItem.failed = !downloadSuccessful;
+      item.failed = !downloadSuccessful;
     }
-    nextItem.cached = true;
+    item.cached = true;
   }
   logSuccess(`Finished processing ${list.name}!\n`);
+
   return list;
 };
 
-const generateReport = async listResults => {
+const generateReport = async (listResults: List[]): Promise<void> => {
   if (listResults.length) {
     logInfo('Download Report:');
-    listResults.forEach(result => {
+    listResults.forEach((result) => {
       const listItems = result.items;
       const itemLength = listItems.length;
-      const failedItems = listItems.filter(item => item.failed);
+      const failedItems = listItems.filter((item) => item.failed);
       const failedItemLength = failedItems.length;
       logInfo(
         [
           'Successfully downloaded',
           `${itemLength - failedItemLength}/${itemLength}`,
           `for ${result.name} (${result.type})`,
-        ].join(' '),
+        ].join(' ')
       );
-      if (failedItemLength) {
+      if (failedItemLength)
         logFailure(
           [
             'Failed items:',
-            ...failedItems.map(item => {
-              return [
+            ...failedItems.map((item) =>
+              [
                 `Item: (${item.name})`,
                 `Album: ${item.album_name}`,
-                `Artist: ${item.artists[0]}`,
+                `Artist: ${item.artists.first}`,
                 `ID: (${item.id})`,
-              ].join(' ');
-            }),
-          ].join('\n'),
+              ].join(' ')
+            ),
+          ].join('\n')
         );
-      }
     });
   }
 };
 
-const run = async () => {
+initArrayPolyfills();
+
+const run = async (): Promise<void> => {
   const listResults = [];
   for (const input of inputs) {
-    const lists = [];
+    const lists: List[] = [];
     logInfo(`Starting processing of ${input.type} (${input.url})`);
     const URL = input.url;
     switch (input.type) {
-      case INPUT_TYPES.SONG.SONG: {
+      case Inputs.SONG: {
         const track = await getTrack(URL);
         lists.push({
           items: [track],
-          name: `${track.name} ${track.artists[0]}`,
+          name: `${track.name} ${track.artists.first}`,
           type: input.type,
-        });
+        } as List);
         break;
       }
-      case INPUT_TYPES.SONG.PLAYLIST: {
+      case Inputs.PLAYLIST: {
         const list = await getPlaylist(URL);
         list.type = input.type;
         lists.push(list);
         break;
       }
-      case INPUT_TYPES.SONG.ALBUM: {
+      case Inputs.ALBUM: {
         const list = await getAlbum(URL);
         list.type = input.type;
         lists.push(list);
         break;
       }
-      case INPUT_TYPES.SONG.ARTIST: {
+      case Inputs.ARTIST: {
         const artistAlbumInfos = await getArtistAlbums(URL);
         lists.push(
-          ...artistAlbumInfos.map(list => {
+          ...artistAlbumInfos.map((list) => {
             list.type = input.type;
+
             return list;
-          }),
+          })
         );
         break;
       }
-      case INPUT_TYPES.EPISODE.EPISODE: {
+      case Inputs.EPISODE: {
         const episode = await getEpisode(URL);
-        if (episode) {
+        if (episode)
           lists.push({
             items: [episode],
             name: `${episode.name} ${episode.album_name}`,
             type: input.type,
           });
-        } else {
-          logFailure('Failed to find episode, you may need to use auth');
-        }
+        else logFailure('Failed to find episode, you may need to use auth');
 
         break;
       }
-      case INPUT_TYPES.EPISODE.SHOW: {
+      case Inputs.SHOW: {
         const list = await getShowEpisodes(URL);
         list.type = input.type;
         lists.push(list);
         break;
       }
-      case INPUT_TYPES.EPISODE.SAVED_SHOWS: {
+      case Inputs.SAVED_SHOWS: {
         const savedShowsInfo = await getSavedShows();
         lists.push(
-          ...savedShowsInfo.map(list => {
+          ...savedShowsInfo.map((list) => {
             list.type = input.type;
+
             return list;
-          }),
+          })
         );
         break;
       }
-      case INPUT_TYPES.SONG.SAVED_ALBUMS: {
+      case Inputs.SAVED_ALBUMS: {
         const savedAlbumsInfo = await getSavedAlbums();
         lists.push(
-          ...savedAlbumsInfo.map(list => {
+          ...savedAlbumsInfo.map((list) => {
             list.type = input.type;
+
             return list;
-          }),
+          })
         );
         break;
       }
-      case INPUT_TYPES.SONG.SAVED_PLAYLISTS: {
+      case Inputs.SAVED_PLAYLISTS: {
         const savedPlaylistsInfo = await getSavedPlaylists();
         lists.push(
-          ...savedPlaylistsInfo.map(list => {
+          ...savedPlaylistsInfo.map((list) => {
             list.type = input.type;
+
             return list;
-          }),
+          })
         );
         break;
       }
-      case INPUT_TYPES.SONG.SAVED_TRACKS: {
+      case Inputs.SAVED_TRACKS: {
         const list = await getSavedTracks();
         list.type = input.type;
         lists.push(list);
         break;
       }
-      case INPUT_TYPES.YOUTUBE: {
+      case Inputs.YOUTUBE: {
         lists.push({
           items: [
             {
@@ -260,8 +260,7 @@ const run = async () => {
       }
       default: {
         throw new Error(
-          `Invalid URL type (${input.type}), ` +
-            'Please visit github and make a request to support this type',
+          `Invalid URL type (${input.type}), ` + 'Please visit github and make a request to support this type'
         );
       }
     }
@@ -269,9 +268,7 @@ const run = async () => {
     for (const [x, list] of lists.entries()) {
       logInfo(`Starting download of list ${x + 1}/${lists.length}`);
       const downloadResult = await downloadList(list);
-      if (downloadReport) {
-        listResults.push(downloadResult);
-      }
+      if (downloadReport) listResults.push(downloadResult);
     }
   }
   await generateReport(listResults);
