@@ -1,4 +1,6 @@
 module.exports = {
+  username: 'phyzical',
+  gitAuthor: 'phyzical <5182053+phyzical@users.noreply.github.com>',
   onboarding: false,
   requireConfig: 'optional',
   // the housekeeping workflow handles this
