@@ -60,7 +60,8 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/SwapnilSoni1999/spotify-dl
 #### Docker
 
 ```sh
-docker run ghcr.io/swapnilsoni1999/spotify-dl
+docker run -it --user=$(id -u):$(id -g) -v $(pwd):/download --rm ghcr.io/swapnilsoni1999/spotify-dl <options-to-spotify-dl defaults to --help>
+docker run -it --user=$(id -u):$(id -g) -v $(pwd):/download --rm ghcr.io/swapnilsoni1999/spotify-dl "https://open.spotify.com/...."
 ```
 
 or Build docker image:
@@ -69,6 +70,7 @@ or Build docker image:
 git clone https://github.com/SwapnilSoni1999/spotify-dl
 cd spotify-dl
 docker build -t spotify-dl .
+docker run -it --user=$(id -u):$(id -g) -v $(pwd):/download --rm spotify-dl "https://open.spotify.com/...."
 ```
 
 <hr>
@@ -129,13 +131,6 @@ if you receive 'Got a spotify api error WebapiRegularError: An error occurred wh
 Details: non existing id' you may need to provide auth either use `--l` for manual login prompt or `--u username --p password` for headless login
 
 If you receive a 429 error please provide a cookies file given the `--cof` flag, to generate a cookies file please refer to [Chrome](https://chrome.google.com/webstore/detail/njabckikapfpffapmjgojcnbfjonfjfg) or [Firefox](https://github.com/rotemdan/ExportCookies)
-
-## Docker
-
-```sh
-docker run -it --user=$(id -u):$(id -g) -v $(pwd):/download --rm spotify-dl <options-to-spotify-dl defaults to --help>
-docker run -it --user=$(id -u):$(id -g) -v $(pwd):/download --rm spotify-dl "https://open.spotify.com/...."
-```
 
 #### Acknowledgements
 
