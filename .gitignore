@@ -4,3 +4,4 @@ node_modules/
 Makefile
 .DS_STORE
 *.mp3
+.spdlcache
